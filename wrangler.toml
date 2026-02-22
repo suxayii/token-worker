@@ -1,0 +1,12 @@
+name = "token-worker"
+main = "worker.js"
+compatibility_date = "2024-01-01"
+
+# Secrets should be set via `wrangler secret put ADMIN_SECRET`
+# [vars]
+# UU_VALUE = "aHR0cHM6Ly9kb3V5aW4tdmVyc2lvbi5wYWdlcy5kZXYvdXBkYXRhL2luc2lnYXBpa2V5Lmpzb24="
+
+[[d1_databases]]
+binding = "DB"
+database_name = "token-worker-db"
+database_id = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" # Replace with your actual D1 database ID after running `npm run db:create`
