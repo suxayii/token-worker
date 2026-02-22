@@ -129,6 +129,21 @@ UPDATE licenses SET term_ms = term_ms + 15768000000 WHERE uuid = 'xxx';
 UPDATE licenses SET term_ms = (目标时间的毫秒时间戳) - activated_at WHERE uuid = 'xxx';
 ```
 
+**5. 详细查询某个/多个口令的状态和剩余天数**
+*(需配合 `term_ms` 和 `max_daily_count` 字段)*
+```sql
+SELECT 
+    uuid, 
+    max_daily_count AS 每日限额,
+    datetime(activated_at / 1000, 'unixepoch', 'localtime') AS 激活时间,
+    datetime((activated_at + term_ms) / 1000, 'unixepoch', 'localtime') AS 到期时间,
+    ((activated_at + term_ms - (strftime('%s', 'now') * 1000)) / 86400000) AS 剩余天数
+FROM licenses 
+WHERE uuid IN (
+    'fenguois-23a4-4599-b4c9-db1f954072b0'
+);
+```
+
 ---
 
 ## 📄 License
