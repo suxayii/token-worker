@@ -92,58 +92,79 @@
 
 ### 🔴 管理控制台接口 (仅限管理员)
 
-**1. 单点生成口令**
+> **鉴权方式**：请在使用接口测试工具（如 Postman、cURL）或代码发请求时，在 HTTP Header 中强制添加 `x-admin-key: <您的 SECRET>`。
+
+**1. 单点生成安全口令**
 *   **路由**: `POST /admin/add`
-*   **说明**: 生成一个带有特定防伪前缀（如 fenguois-*）的新 UUID，初始化额度并落库。
+*   **扩展参数 (Query)**: 支持通过 `?limit={日限额}&term={有效年数}` 定制逻辑 *(注：视您项目 Worker 具体扩展版本而定)*
+*   **说明**: 随机生成一个带有特定防伪前缀（如 `fenguois-*`）的新 UUID，完成初始化并持久化到 D1 数据库。
+*   **成功返回示例**:
+    ```json
+    { "success": true, "data": { "id": 1024, "uuid": "fenguois-1a2b3c..." } }
+    ```
 
-**2. 极限批量造库**
+**2. 极限批量造库 (冷启动神器)**
 *   **路由**: `POST /admin/generate`
-*   **说明**: 供内部压测或冷启动时使用。目前策略为自动写入一千至数千条默认规格口令。
+*   **说明**: 供上线初期批量发卡、内部压测或冷启动时使用。脚本内置批量事务 (Batch Transactions)，一次性向数据库高并发插入一千至数千条默认规格口令。
+*   **成功返回示例**:
+    ```json
+    { "success": true, "count": 3000 }
+    // 耗时大概在两到三秒左右，完全不惧 Edge Network 的限制
+    ```
 
-**3. 核销 / 删除口令**
+**3. 永久封停销户 (物理删除)**
 *   **路由**: `POST /admin/delete?uuid={目标UUID}`
-*   **说明**: 将对应口令的所有数据从 D1 数据库物理抹除。
+*   **说明**: 将对应口令的所有业务数据及额度历史从 D1 数据库中**彻底物理抹除**。此操作不可逆，请谨慎防范误删事故。
+*   **成功返回示例**:
+    ```json
+    { "success": true }
+    ```
 
 ---
 
 ## 🧰 零代码运维手册 (SQL 实操)
 
-作为项目的拥有者，遇到客诉或者需要修改部分高阶用户的权益时，**完全不需要修改 Worker 代码**。
-直接进入 Cloudflare D1 仪表盘的 **[Console] (控制台)**，用 SQL 语句即可完成一切上帝视角的修改：
+作为项目的拥有者，日常遇到客诉处理、手动调整权益额度或者直接封禁违规用户时，**您完全不需要修改 Worker 核心代码**或者重新走部署流程。
 
-**1. 给某个口令"解封今日次数"：**
+只需登录 Cloudflare 控制台，进入 D1 数据库实例内部的 **[Console] (控制台)** 选项卡，输入下列经过实战检验的 SQL 语句进行执行（Execute），即可完成一切“上帝视角”的改动：
+
+**1. 🍼 额度刷新：给某用户手动“解封”今日计费**
+*使用场景：某些用户抱怨因为测试接口把今天可用次数用光了，客服想人工给他今天一次重新体验的机会。*
 ```sql
-UPDATE licenses SET daily_count = 0 WHERE uuid = 'xxx';
+UPDATE licenses SET daily_count = 0 WHERE uuid = '填入用户的UUID';
 ```
 
-**2. 永久提额（需搭配字段支持）：**
+**2. 🚀 永久提权：给某大客户或者自己定制专属的超大日限额**
+*使用场景：默认发卡的普通用户限额 50 次，VIP 企业大客户需要提升到每日调用 8000 次。（前提条件：建议您的业务端配置了读取 `max_daily_count` 即扩展日限额字段的逻辑)*
 ```sql
-UPDATE licenses SET max_daily_count = 500 WHERE uuid = 'xxx';
+UPDATE licenses SET max_daily_count = 8000 WHERE uuid = '填入用户的UUID';
 ```
 
-**3. 时间续费（以毫秒为单位给口令续命）：**
-*(例如续增加半年约 15768000000 毫秒)*
+**3. ⏱️ 充值续费：以“毫秒大单位”颗粒度硬核直充有效期**
+*使用场景：用户充钱购买了半年的增值服务（半年时长约换算为 15768000000 毫秒），需要原封不动把这段时长叠加到原本他的老有效期内。（前提条件：配合表结构的 `term_ms` 字段逻辑起效)*
 ```sql
-UPDATE licenses SET term_ms = term_ms + 15768000000 WHERE uuid = 'xxx';
+UPDATE licenses SET term_ms = term_ms + 15768000000 WHERE uuid = '填入用户的UUID';
 ```
 
-**4. 刑满释放或强制注销（指定时间戳）：**
+**4. 🚫 封禁惩罚：将某人强制裁决到一个确定的过去时间点，使其当场验证失败**
+*使用场景：风控检测到用户涉嫌极其恶劣的违规盗刷，将其到期时间强行倒退为过去的绝对时间戳（或者直接封定到昨天），他下次验证直接秒走 403 路由。*
 ```sql
-UPDATE licenses SET term_ms = (目标时间的毫秒时间戳) - activated_at WHERE uuid = 'xxx';
+UPDATE licenses SET term_ms = (目标时间的硬核毫秒时间戳) - activated_at WHERE uuid = '填入用户的UUID';
 ```
 
-**5. 仪表盘探针（全景洞察所选 UUID 当前的精确寿命和余量）**
-*(此 SQL 支持查阅激活时间、到期时间，及倒计时剩余天数)*
+**5. 🕵️ 客服仪表盘探针：全景洞察所选 UUID 极其精确的当前寿命和账本余量**
+*使用场景：客服接到单子，想要快速在数据库用一条查询指令出结果，这句不仅会格式化呈现激活时间、北京时区的到期日历，还能根据秒跳动实时算出他的**倒计时剩余存活天数**。*
 ```sql
 SELECT 
-    uuid, 
-    max_daily_count AS 每日限额,
-    datetime(activated_at / 1000, 'unixepoch', 'localtime') AS 激活时间,
-    datetime((activated_at + term_ms) / 1000, 'unixepoch', 'localtime') AS 到期时间,
-    ((activated_at + term_ms - (strftime('%s', 'now') * 1000)) / 86400000) AS 剩余天数
+    uuid AS 口令码, 
+    max_daily_count AS 每日授权限额,
+    datetime(activated_at / 1000, 'unixepoch', 'localtime') AS 首次激活时间,
+    datetime((activated_at + term_ms) / 1000, 'unixepoch', 'localtime') AS 即将到期时间,
+    ((activated_at + term_ms - (strftime('%s', 'now') * 1000)) / 86400000) AS 生命剩余天数
 FROM licenses 
 WHERE uuid IN (
-    '在这里填入想要查询的UUID文本'
+    '请在这里小心粘贴需要首要排查的真实 UUID 文本',
+    '如果有批量连带多个号需要查询的情况，可以用英文逗号隔开放下一行继续粘贴'
 );
 ```
 
