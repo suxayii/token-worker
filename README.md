@@ -12,72 +12,60 @@
 ## 📁 项目结构
 
 - `worker.js`: Cloudflare Worker 的核心代码脚本。
-- `schema.sql`: D1 数据库建表语句。
-- `wrangler.toml`: Cloudflare 项目配置文件。
+- `schema.sql`: D1 数据库建表语句。你需要将此内容复制到控制台执行。
 
-## 🛠️ 前置准备
+---
 
-- 已安装 [Node.js](https://nodejs.org/)
-- 已全局或通过 npx 安装 [Wrangler CLI](https://developers.cloudflare.com/workers/wrangler/install-and-update/) 
-- 拥有一个 Cloudflare 账号
+## 🚀 部署指南 (纯 Cloudflare 网页端操作)
 
-## 🚀 部署与初始化指南
+你完全不需要本地安装 Node.js 或任何命令行工具，只需在 Cloudflare 仪表盘 (Dashboard) 配置即可完成部署。
 
-### 1. 安装依赖
+### 1. 创建 D1 数据库
 
-```bash
-npm install
-```
+1. 登录 Cloudflare 控制台。
+2. 在左侧菜单找到 **[Workers & Pages] -> [D1 SQL Database]**。
+3. 点击右上角 **[Create database] (创建数据库)**。
+4. 命名为 `token-worker-db`（或者你想要的任何名字），点击 **[Create] (创建)**。
 
-### 2. 创建 D1 数据库
+### 2. 写入数据库表结构
 
-运行以下命令在你的 Cloudflare 账号下创建一个 D1 数据库 (如果你没有登录，命令会提示你授权登录)：
+1. 进入你刚刚创建的 D1 数据库管理页面。
+2. 找到并打开 **[Console] (控制台)** 选项卡。
+3. 打开本项目中的 [`schema.sql`](./schema.sql) 文件，复制里面所有的 SQL 语句。
+4. 粘贴到控制台的输入框内，点击执行（**Execute**）。
+   *这会为你自动创建必需的 `licenses` 表。*
 
-```bash
-npm run db:create
-```
+### 3. 创建 Cloudflare Worker
 
-该命令执行后，控制台会输出 `database_name` 和 `database_id`。
-**非常重要**：请打开根目录的 `wrangler.toml` 文件，将你在控制台获取的 ID 填入 `database_id` 字段中。
+1. 在左侧菜单回到 **[Workers & Pages] -> [Overview]**。
+2. 点击右上角的 **[Create application] (创建应用程序)**，然后点击 **[Create Worker] (创建 Worker)**。
+3. 命名你的 Worker（如 `token-worker`），然后点击 **[Deploy] (部署)**。
+4. 点击 **[Edit code] (编辑代码)** 进入在线网页编辑器。
+5. 打开本项目中的 [`worker.js`](./worker.js) 文件，复制里面的所有代码。
+6. 将网页编辑器中原有的代码（如 `export default { fetch() {...} }`）**全部删掉并替换**为你复制的代码。
+7. （先不要点保存/部署，我们需要先绑定数据库）。
 
-### 3. 初始化数据库表结构
+### 4. 绑定 D1 数据库与设置密钥
 
-将表结构应用到你的 D1 数据库中：
+打开你的 Worker 项目详情页（**[Workers & Pages] -> 点击你的 Worker 名字**）：
 
-**本地测试环境初始化:**
-```bash
-npm run db:init:local
-```
+**绑定数据库：**
+1. 切换到 **[Settings] (设置)** 选项卡 -> 选择左侧的 **[Bindings] (绑定)** 菜单。
+2. 点击 **[Add] (添加)** 按钮，类型选择 **[D1 database]**。
+3. **Variable name (变量名)** 必须精准填写为 `DB` （代码中读取的是 env.DB）。
+4. **D1 database** 选择你刚刚在第 1 步创建的数据库（下拉菜单选择）。
+5. 部署保存。
 
-**线上远程环境初始化:**
-```bash
-npm run db:init:remote
-```
+**设置管理员密钥 (Variables)：**
+1. 仍然在 **[Settings] (设置)** 选项卡 -> 选择左侧的 **[Variables and Secrets] (变量和加密) -> [Environment variables]**。
+2. 点击 **[Add variable] (添加变量)**。
+3. **Variable name (变量名)** 填写 `ADMIN_SECRET`。
+4. **Value (值)** 填入你自定义的管理员密码（例如：`MySuperSecret123!`）。
+5. 点击 **[Deploy] (部署)** 使其生效。
 
-### 4. 设置安全密钥 (Secrets)
+### 5. 完成上线
 
-你必须设置一个 `ADMIN_SECRET`，这相当于你的管理员密码，所有发往 `/admin/*` 的请求都必须在 Header 携带此密钥才能通过验证。
-
-```bash
-npx wrangler secret put ADMIN_SECRET
-```
-*(在提示时输入你想要的复杂密码)*
-
-### 5. 本地运行与测试
-
-通过以下命令在本地启动 Worker 服务进行测试：
-
-```bash
-npm run dev
-```
-
-### 6. 部署到 Cloudflare
-
-一键部署到 Cloudflare 的边缘网络：
-
-```bash
-npm run deploy
-```
+由于你已经完成了代码编辑（第 3 步）、数据库绑定与变量定义（第 4 步），现在你的服务已经完美跑在了 Cloudflare 的全球边缘节点上！你可以通过分配到的 `xxx.xxx.workers.dev` 域名来访问。
 
 ---
 
@@ -97,27 +85,26 @@ npm run deploy
 
 ### 🔴 管理员接口 (Header 必须包含 `x-admin-key: 你的密钥`)
 
+*(提示：可以使用 Postman 或 cURL 在电脑/手机上调用)*
+
 **1. 创建单个口令**
-*   **路由**: `POST /admin/add?limit={日限额}&term={有效年数}` *(注：limit 和 term 的动态支持需根据最新 Worker.js 代码实际参数配置，此处作逻辑展示)*
-*   **说明**: 生成一个带特征前缀（如 fenguois）的新 UUID。可扩展支持动态传入 `limit` (每日次数) 和 `term` (有效期，单位：年)。
+*   **路由**: `POST /admin/add`
+*   **说明**: 生成一个带特征前缀（如 fenguois）的新 UUID。并在数据库中记录。
 
 **2. 批量生成口令**
 *   **路由**: `POST /admin/generate`
-*   **说明**: 内部循环一次性向数据库批量插入多条默认规格的 UUID（目前代码默认 3000 条，每批次 50 条并发）。
+*   **说明**: 内部循环一次性向数据库批量插入多条默认规格的 UUID。
 
 **3. 删除指定口令**
 *   **路由**: `POST /admin/delete?uuid={target_uuid}`
 *   **说明**: 从数据库中永久删除该 UUID 记录。
 
-**4. 查询口令详情** (如有实现)
-*   **路由**: `GET /admin/info?uuid={target_uuid}`
-*   **说明**: 返回该口令的完整信息，包括剩余次数、北京时间格式的到期日等。
-
 ---
 
 ## 🧰 常见运维与客服场景处理
 
-在日常运营中，很多客诉或规则修改**完全不需要改动 Worker 代码**，你只需要在 Cloudflare 的 D1 仪表盘中，或使用 Wrangler 命令行执行简单的 SQL 语句即可处理：
+在日常运营中，很多客诉或规则修改**完全不需要改动 Worker 代码**。
+你只需要回到 Cloudflare **[D1 仪表盘]** 的 **[Console] (控制台)**，执行简单的 SQL 语句即可：
 
 **1. 给某个用户重置今天的次数（让他继续用）：**
 ```sql
@@ -125,18 +112,19 @@ UPDATE licenses SET daily_count = 0 WHERE uuid = 'xxx';
 ```
 
 **2. 给某个用户提升“套餐”（比如升级到每日 500 次）：**
-*(注意：需要你的 schema.sql 支持 max_daily_count 字段，或 Worker.js 动态读取该字段逻辑)*
+*(需前置代码逻辑或表结构支持)*
 ```sql
 UPDATE licenses SET max_daily_count = 500 WHERE uuid = 'xxx';
 ```
 
 **3. 给某个用户续费/延长到期时间（在原基础上增加半年）：**
-*(注意：需要你的 schema.sql 或 Worker 支持 term_ms 或有效操作)*
+*(需前置代码逻辑或表结构支持)*
 ```sql
 UPDATE licenses SET term_ms = term_ms + 15768000000 WHERE uuid = 'xxx';
 ```
 
 **4. 指定某人到一个确切的日期到期（比如封号/提前结束）：**
+*(需前置代码逻辑或表结构支持)*
 ```sql
 UPDATE licenses SET term_ms = (目标时间的毫秒时间戳) - activated_at WHERE uuid = 'xxx';
 ```
