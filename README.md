@@ -1,136 +1,139 @@
-# Token Worker 授权系统
-
-本项目是一个基于 Cloudflare Worker 的轻量级、极速的 UUID/口令验证系统，由 Cloudflare D1（Serverless SQLite） 提供数据支持。
-
-## ✨ 特性
-
-- ⚡️ **极致性能**: 运行在全球部署的 Cloudflare Edge 节点上。
-- 🗄️ **Cloudflare D1**: 使用 Serverless SQLite 存储和验证 UUID。
-- 🕒 **动态过期与用量限制**: 支持每一个 UUID 独立的配置额度（例如：每日调用次数限制、生命周期有效时间限制）。
-- 🛡️ **管理接口**: 受保护的 Admin 接口，支持快速生成、添加、删除和查询 UUID。
-
-## 📁 项目结构
-
-- `worker.js`: Cloudflare Worker 的核心代码脚本。
-- `schema.sql`: D1 数据库建表语句。你需要将此内容复制到控制台执行。
+<div align="center">
+  <h1>🛡️ Token Worker 授权系统</h1>
+  <p><b>一个基于 Cloudflare Edge 和 D1 Serverless 数据库构建的极速、轻量级 API 授权管理与验证系统。</b></p>
+</div>
 
 ---
 
-## 🚀 部署指南 (纯 Cloudflare 网页端操作)
+## ✨ 核心特性
 
-你完全不需要本地安装 Node.js 或任何命令行工具，只需在 Cloudflare 仪表盘 (Dashboard) 配置即可完成部署。
+- ⚡️ **极致性能**: 部署在 Cloudflare 全球 Edge 边缘节点，实现超低延迟的校验。
+- 🗄️ **无需自建数据库**: 依托 Cloudflare D1 (Serverless SQLite)，零维护成本，免费额度极高。
+- 🕒 **精细化控制**: 支持为每个 UUID（口令）灵活配置独立额度（如：每日调用次数限制、总生命周期有效期）。
+- 🛡️ **安全闭环**: 客户端极速验证路由 + 受密钥严密保护的后台 Admin 操作接口。
+
+---
+
+## 📁 核心文件概览
+
+| 文件名 | 功能描述 |
+|:---|:---|
+| 📄 `worker.js` | Cloudflare Worker 的核心逻辑代码（包含了限流、验证、各种路由判断） |
+| 🗃️ `schema.sql` | D1 数据库初始化的建表 SQL 语句，部署时直接使用 |
+| ⚙️ `wrangler.toml` (可选) | 若您日后使用 CLI 工具部署时的本地配置文件（纯网页部署可忽略） |
+
+---
+
+## 🚀 极简部署指南 (纯网页操作，零基础)
+
+这套系统专门优化了部署流程，您**无需**在电脑上安装 Node.js、Wrangler CLI 或任何本地开发环境。全程只需在 Cloudflare 仪表盘 (Dashboard) 点点鼠标即可。
 
 ### 1. 创建 D1 数据库
 
-1. 登录 Cloudflare 控制台。
-2. 在左侧菜单找到 **[Workers & Pages] -> [D1 SQL Database]**。
-3. 点击右上角 **[Create database] (创建数据库)**。
-4. 命名为 `token-worker-db`（或者你想要的任何名字），点击 **[Create] (创建)**。
+1. 登录 [Cloudflare 控制台](https://dash.cloudflare.com/)。
+2. 左侧菜单导航至 **[Workers & Pages]** -> **[D1 SQL Database]**。
+3. 点击右上角 **[Create database] (创建数据库)**，随意命名（例如 `my-token-db`），然后点击创建。
 
 ### 2. 写入数据库表结构
 
-1. 进入你刚刚创建的 D1 数据库管理页面。
+1. 创建完成后，进入该数据库的管理页面。
 2. 找到并打开 **[Console] (控制台)** 选项卡。
-3. 打开本项目中的 [`schema.sql`](./schema.sql) 文件，复制里面所有的 SQL 语句。
-4. 粘贴到控制台的输入框内，点击执行（**Execute**）。
-   *这会为你自动创建必需的 `licenses` 表。*
+3. 打开本开源项目中的 [`schema.sql`](./schema.sql) 文件，复制里面所有的 SQL 语句。
+4. 粘贴到控制台的输入框内，点击 **执行 (Execute)**。这会为您自动生成必需的 `licenses` 数据表。
 
-### 3. 创建 Cloudflare Worker
+### 3. 创建并部署 Worker 脚本
 
-1. 在左侧菜单回到 **[Workers & Pages] -> [Overview]**。
+1. 左侧菜单导航至 **[Workers & Pages]** -> **[Overview]**。
 2. 点击右上角的 **[Create application] (创建应用程序)**，然后点击 **[Create Worker] (创建 Worker)**。
-3. 命名你的 Worker（如 `token-worker`），然后点击 **[Deploy] (部署)**。
-4. 点击 **[Edit code] (编辑代码)** 进入在线网页编辑器。
-5. 打开本项目中的 [`worker.js`](./worker.js) 文件，复制里面的所有代码。
-6. 将网页编辑器中原有的代码（如 `export default { fetch() {...} }`）**全部删掉并替换**为你复制的代码。
-7. （先不要点保存/部署，我们需要先绑定数据库）。
+3. 为您的核心服务命名（例如 `auth-worker`），然后直接点击右下角 **[Deploy] (部署)**。此时模板代码已经上线。
+4. 在成功页面点击 **[Edit code] (编辑代码)**，进入云端代码编辑器。
+5. 打开本项目中的 [`worker.js`](./worker.js) 文件，复制其所有内容。
+6. 将网页编辑器中原有的全部代码**完全删除**并替换为复制进去的项目代码。
+7. *先不要着急点击“保存并部署”，我们还需要完成下一步绑定。*
 
-### 4. 绑定 D1 数据库与设置密钥
+### 4. 绑定数据库与防爆破密钥
 
-打开你的 Worker 项目详情页（**[Workers & Pages] -> 点击你的 Worker 名字**）：
+打开您的 Worker 项目详情页（**[Workers & Pages] -> 点击您刚才创建的 Worker**）：
 
-**绑定数据库：**
+🔑 **绑定数据库：**
 1. 切换到 **[Settings] (设置)** 选项卡 -> 选择左侧的 **[Bindings] (绑定)** 菜单。
-2. 点击 **[Add] (添加)** 按钮，类型选择 **[D1 database]**。
-3. **Variable name (变量名)** 必须精准填写为 `DB` （代码中读取的是 env.DB）。
-4. **D1 database** 选择你刚刚在第 1 步创建的数据库（下拉菜单选择）。
+2. 点击 **[Add] (添加)** 按钮，类型请选择 **[D1 database]**。
+3. ⚠️ **Variable name (变量名)** 必须精准填写为 `DB`（因代码中默认通过 `env.DB` 访问）。
+4. **D1 database** 下拉框选择您在第 1 步创建的那个数据库。
 5. 部署保存。
 
-**设置管理员密钥 (Variables)：**
+🔒 **设置管理员密钥 (Admin Secret)：**
 1. 仍然在 **[Settings] (设置)** 选项卡 -> 选择左侧的 **[Variables and Secrets] (变量和加密) -> [Environment variables]**。
 2. 点击 **[Add variable] (添加变量)**。
 3. **Variable name (变量名)** 填写 `ADMIN_SECRET`。
-4. **Value (值)** 填入你自定义的管理员密码（例如：`MySuperSecret123!`）。
-5. 点击 **[Deploy] (部署)** 使其生效。
+4. **Value (值)** 填入您自定义的强密码（例如：`My0nlyAdMiNp4ssW0rd!`）。这把钥匙将用于日后所有的口令增删查改。
+5. 点击 **[Deploy] (部署)** 使所有配置正式生效。
 
-### 5. 完成上线
-
-由于你已经完成了代码编辑（第 3 步）、数据库绑定与变量定义（第 4 步），现在你的服务已经完美跑在了 Cloudflare 的全球边缘节点上！你可以通过分配到的 `xxx.xxx.workers.dev` 域名来访问。
+🎉 **恭喜您，大功告成！** 系统已平稳运行在 Cloudflare 边缘节点，可通过为您分配的 `*.workers.dev` 域名开始使用。
 
 ---
 
-## 📖 API 接口路由清单
+## 📖 API 接口路由全景指南
 
-### 🟢 客户端调用接口 (无管理员鉴权)
+> 💡 **提示**：所有 `/admin/` 开头的接口都必须在 HTTP Header 中携带键值对 `x-admin-key: <您的 SECRET>`。
 
-**路由: `GET /verify?uuid={your_uuid}`**
+### 🟢 客户端验证接口 (对外开放)
 
-*   **功能**: 极速验证口令并扣除 1 次今日额度。
-*   **逻辑判定顺序**:
-    1.  检查是否存在。
-    2.  检查是否过期（当前时间 > 激活时间 + 有效期）。
-    3.  检查今日次数是否已达上限（根据系统或特殊定制额度）。
-*   **成功返回**: `{"valid": true, "remaining_today": 49, "expires_at": "..."}`
-*   **失败返回**: 状态码 `403` (过期) 或 `429` (次数用尽) 或 `404` (不存在)。
+**1. 极速验证扣减**
+*   **路由**: `GET /verify?uuid={待验证的UUID}`
+*   **动作逻辑**: 
+    - 检查 UUID 是否存在于数据库 
+    - 验证有效期是否过期
+    - 校验/扣减当天的调用限频配额
+*   **🟢 成功回调**: `{"valid": true, "remaining_today": 49, "expires_at": "..."}`
+*   **🔴 异常回调**: HTTP `403` (已过期) / `429` (今日次数耗尽) / `404` (非法或不存在的口令)
 
-### 🔴 管理员接口 (Header 必须包含 `x-admin-key: 你的密钥`)
+---
 
-*(提示：可以使用 Postman 或 cURL 在电脑/手机上调用)*
+### 🔴 管理控制台接口 (仅限管理员)
 
-**1. 创建单个口令**
+**1. 单点生成口令**
 *   **路由**: `POST /admin/add`
-*   **说明**: 生成一个带特征前缀（如 fenguois）的新 UUID。并在数据库中记录。
+*   **说明**: 生成一个带有特定防伪前缀（如 fenguois-*）的新 UUID，初始化额度并落库。
 
-**2. 批量生成口令**
+**2. 极限批量造库**
 *   **路由**: `POST /admin/generate`
-*   **说明**: 内部循环一次性向数据库批量插入多条默认规格的 UUID。
+*   **说明**: 供内部压测或冷启动时使用。目前策略为自动写入一千至数千条默认规格口令。
 
-**3. 删除指定口令**
-*   **路由**: `POST /admin/delete?uuid={target_uuid}`
-*   **说明**: 从数据库中永久删除该 UUID 记录。
+**3. 核销 / 删除口令**
+*   **路由**: `POST /admin/delete?uuid={目标UUID}`
+*   **说明**: 将对应口令的所有数据从 D1 数据库物理抹除。
 
 ---
 
-## 🧰 常见运维与客服场景处理
+## 🧰 零代码运维手册 (SQL 实操)
 
-在日常运营中，很多客诉或规则修改**完全不需要改动 Worker 代码**。
-你只需要回到 Cloudflare **[D1 仪表盘]** 的 **[Console] (控制台)**，执行简单的 SQL 语句即可：
+作为项目的拥有者，遇到客诉或者需要修改部分高阶用户的权益时，**完全不需要修改 Worker 代码**。
+直接进入 Cloudflare D1 仪表盘的 **[Console] (控制台)**，用 SQL 语句即可完成一切上帝视角的修改：
 
-**1. 给某个用户重置今天的次数（让他继续用）：**
+**1. 给某个口令"解封今日次数"：**
 ```sql
 UPDATE licenses SET daily_count = 0 WHERE uuid = 'xxx';
 ```
 
-**2. 给某个用户提升“套餐”（比如升级到每日 500 次）：**
-*(需前置代码逻辑或表结构支持)*
+**2. 永久提额（需搭配字段支持）：**
 ```sql
 UPDATE licenses SET max_daily_count = 500 WHERE uuid = 'xxx';
 ```
 
-**3. 给某个用户续费/延长到期时间（在原基础上增加半年）：**
-*(需前置代码逻辑或表结构支持)*
+**3. 时间续费（以毫秒为单位给口令续命）：**
+*(例如续增加半年约 15768000000 毫秒)*
 ```sql
 UPDATE licenses SET term_ms = term_ms + 15768000000 WHERE uuid = 'xxx';
 ```
 
-**4. 指定某人到一个确切的日期到期（比如封号/提前结束）：**
-*(需前置代码逻辑或表结构支持)*
+**4. 刑满释放或强制注销（指定时间戳）：**
 ```sql
 UPDATE licenses SET term_ms = (目标时间的毫秒时间戳) - activated_at WHERE uuid = 'xxx';
 ```
 
-**5. 详细查询某个/多个口令的状态和剩余天数**
-*(需配合 `term_ms` 和 `max_daily_count` 字段)*
+**5. 仪表盘探针（全景洞察所选 UUID 当前的精确寿命和余量）**
+*(此 SQL 支持查阅激活时间、到期时间，及倒计时剩余天数)*
 ```sql
 SELECT 
     uuid, 
@@ -140,12 +143,13 @@ SELECT
     ((activated_at + term_ms - (strftime('%s', 'now') * 1000)) / 86400000) AS 剩余天数
 FROM licenses 
 WHERE uuid IN (
-    'fenguois-23a4-4599-b4c9-db1f954072b0'
+    '在这里填入想要查询的UUID文本'
 );
 ```
 
 ---
 
-## 📄 License
+## 📄 开源许可证
 
-本项目基于 MIT 协议开源 - 查看 [LICENSE](./LICENSE) 文件了解更多详情。
+本项目遵从 **MIT 宽松许可协议**。无论是个人学习、二次开发、还是商业化包装整合，都享有充分且自由的使用权。参阅 [LICENSE](./LICENSE) 文件获取完整声明。
+
