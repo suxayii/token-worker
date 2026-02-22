@@ -19,25 +19,9 @@ export default {
                 timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit'
             }).format(new Date());
 
-            // ---------------------------------------------------------
-            // [特殊规则配置区]
-            // ---------------------------------------------------------
-            let dailyLimit = 50;        // 默认每日 50 次
-            let expirationMs = 31536000000; // 默认 1 年 (365天)
-
-            // 规则 A: 指定 UUID 修改为 300 次
-            if (uuid === 'fenguois-5f28-4bd9-b181-cc030851daba') {
-                dailyLimit = 300;
-            }
-
-            // 规则 B: 之前提到的特殊 UUID 设置为 2年/35次
-            if (uuid === 'fenguois-custom-35-2y') {
-                dailyLimit = 35;
-                expirationMs = 63072000000; // 2 年
-            }
-            // ---------------------------------------------------------
-
-            // 2. [核心优化] 尝试“一击必杀”更新
+            // 2. [核心优化] 获取最新状态并同时尝试更新
+            // 采用直接利用 DB 表中内置的 max_daily_count 和 term_ms
+            // 注意：绑定的参数必须与 SQL 中的 ? 序号完美对应
             const result = await env.DB.prepare(`
         UPDATE licenses
         SET 
@@ -48,10 +32,10 @@ export default {
           last_reset_date = ?2,
           activated_at = COALESCE(activated_at, ?1) 
         WHERE uuid = ?3
-          AND (activated_at IS NULL OR (?1 - activated_at) <= ?4) -- 动态过期时长
-          AND (last_reset_date != ?2 OR daily_count < ?5)        -- 动态每日限额
-        RETURNING id, uuid, daily_count, activated_at
-      `).bind(now, currentBeijingDate, uuid, expirationMs, dailyLimit).first();
+          AND (activated_at IS NULL OR (?1 - activated_at) <= term_ms)
+          AND (last_reset_date != ?2 OR daily_count < max_daily_count)
+        RETURNING id, uuid, daily_count, activated_at, max_daily_count, term_ms
+      `).bind(now, currentBeijingDate, uuid).first();
 
             // 3. [Happy Path] 验证成功
             if (result) {
@@ -59,31 +43,31 @@ export default {
                     valid: true,
                     id: result.id,
                     uuid: result.uuid,
-                    remaining_today: dailyLimit - result.daily_count, // 基于动态限额计算
+                    remaining_today: result.max_daily_count - result.daily_count,
                     uu: env.UU_VALUE || "aHR0cHM6Ly9kb3V5aW4tdmVyc2lvbi5wYWdlcy5kZXYvdXBkYXRhL2luc2lnYXBpa2V5Lmpzb24=",
-                    expires_at: new Date(result.activated_at + expirationMs).toISOString()
+                    expires_at: new Date(result.activated_at + result.term_ms).toISOString()
                 }), { headers: { 'content-type': 'application/json' } });
             }
 
-            // 4. [Sad Path] 失败原因排查
+            // 4. [Sad Path] 失败原因排查 (走到这里证明 UPDATE 失效了，需要查明原因是过期、死码还是次数用尽)
             const check = await env.DB.prepare('SELECT * FROM licenses WHERE uuid = ?').bind(uuid).first();
 
             if (!check) {
                 return new Response(JSON.stringify({ valid: false, reason: 'UUID not found' }), { status: 404 });
             }
 
-            // 动态检查过期
-            if (check.activated_at && (now - check.activated_at > expirationMs)) {
+            // 检查过期 (使用 DB 内的 term_ms)
+            if (check.activated_at && (now - check.activated_at > check.term_ms)) {
                 return new Response(JSON.stringify({ valid: false, reason: 'Expired' }), { status: 403 });
             }
 
-            // 动态检查次数
+            // 检查次数 (使用 DB 内的 max_daily_count)
             let currentCount = (check.last_reset_date === currentBeijingDate) ? check.daily_count : 0;
-            if (currentCount >= dailyLimit) {
+            if (currentCount >= check.max_daily_count) {
                 return new Response(JSON.stringify({
                     valid: false,
                     reason: 'Daily limit reached',
-                    limit: dailyLimit
+                    limit: check.max_daily_count
                 }), { status: 429 });
             }
 
