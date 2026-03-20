@@ -26,14 +26,14 @@ export default {
         UPDATE licenses
         SET 
           daily_count = CASE 
-            WHEN last_reset_date != ?2 THEN 1 
+            WHEN last_reset_date IS NOT ?2 THEN 1 
             ELSE daily_count + 1 
           END,
           last_reset_date = ?2,
           activated_at = COALESCE(activated_at, ?1) 
         WHERE uuid = ?3
           AND (activated_at IS NULL OR (?1 - activated_at) <= term_ms)
-          AND (last_reset_date != ?2 OR daily_count < max_daily_count)
+          AND (last_reset_date IS NOT ?2 OR daily_count < max_daily_count)
         RETURNING id, uuid, daily_count, activated_at, max_daily_count, term_ms
       `).bind(now, currentBeijingDate, uuid).first();
 
@@ -85,7 +85,7 @@ export default {
             for (let i = 0; i < 3000; i += BATCH_SIZE) {
                 const statements = [];
                 for (let j = 0; j < BATCH_SIZE; j++) {
-                    const customUuid = "fenguois" + crypto.randomUUID().substring(8);
+                    const customUuid = "fgtwittx" + crypto.randomUUID().substring(8);
                     statements.push(env.DB.prepare('INSERT INTO licenses (uuid) VALUES (?)').bind(customUuid));
                 }
                 await env.DB.batch(statements);
@@ -96,7 +96,7 @@ export default {
 
         if (path === '/admin/add' && request.method === 'POST') {
             if (!checkAdmin()) return new Response('Forbidden', { status: 403 });
-            const customUuid = "fenguois" + crypto.randomUUID().substring(8);
+            const customUuid = "fgtwittx" + crypto.randomUUID().substring(8);
             const res = await env.DB.prepare('INSERT INTO licenses (uuid) VALUES (?) RETURNING id, uuid').bind(customUuid).first();
             return new Response(JSON.stringify({ success: true, data: res }));
         }
